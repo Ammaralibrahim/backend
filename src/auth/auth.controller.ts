@@ -53,23 +53,30 @@ export class AuthController {
     }
   }
 
-  @Put('reset-password')
-  async resetPassword(@Body('token') token: string, @Body('newPassword') newPassword: string): Promise<any> {
+  
+  @Put('send-verification-code')
+  async sendVerificationCode(@Body('email') email: string): Promise<any> {
     try {
-      await this.authService.resetPassword(token, newPassword);
-      return { message: 'Password reset successful' };
+      await this.authService.sendVerificationCode(email);
+      return { message: 'Verification code sent' };
     } catch (error) {
       throw new HttpException(error.message, HttpStatus.BAD_REQUEST);
     }
   }
 
-  @Post('send-reset-email')
-  async sendResetEmail(@Body('email') email: string): Promise<any> {
+  @Put('verify-and-reset-password')
+  async verifyAndResetPassword(
+    @Body('email') email: string,
+    @Body('verificationCode') verificationCode: string,
+    @Body('newPassword') newPassword: string
+  ): Promise<any> {
     try {
-      await this.authService.sendPasswordResetEmail(email);
-      return { message: 'Password reset email sent' };
+      await this.authService.verifyAndResetPassword(email, verificationCode, newPassword);
+      return { message: 'Password reset successful' };
     } catch (error) {
       throw new HttpException(error.message, HttpStatus.BAD_REQUEST);
     }
   }
+  
+  
 }

@@ -12,7 +12,10 @@ export class User {
   password: string;
 
   @Prop()
-  resetToken?: string; // Optional reset token field
+  verificationCode?: string; // Doğrulama kodu alanı
+
+  @Prop()
+  codeExpiration?: Date; // Doğrulama kodu geçerlilik süresi
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

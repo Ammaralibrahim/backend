@@ -11,10 +11,13 @@ export class AuthService {
 
   constructor(@InjectModel(User.name) private readonly userModel: Model<UserDocument>) {}
 
-  async register(user: User): Promise<void> {
+  async register(user: User): Promise<string> {
     const newUser = new this.userModel(user);
     await newUser.save();
+    
+    const token = jwt.sign({ userId: newUser._id, email: newUser.email }, 'aaazmh1980', { expiresIn: '8h' });
     this.logger.log(`User registered: ${newUser.email}`);
+    return token;
   }
 
   async registerAndLogin(user: User): Promise<string> {
@@ -39,9 +42,10 @@ export class AuthService {
     try {
       const decoded = jwt.verify(token, 'aaazmh1980');
       if (typeof decoded === 'string') {
-        return false;
+        return false; // Token verification failed
       }
   
+      // We can safely assume decoded is of JwtPayload type now
       if (decoded.email) {
         this.logger.log(`Token verified: ${decoded.email}`);
       }
@@ -61,14 +65,17 @@ export class AuthService {
     }
   }
 
-  async sendPasswordResetEmail(email: string): Promise<void> {
+  async sendVerificationCode(email: string): Promise<void> {
     const user = await this.userModel.findOne({ email }).exec();
     if (!user) {
       throw new HttpException('User not found', HttpStatus.NOT_FOUND);
     }
-  
-    const token = jwt.sign({ userId: user._id }, 'aaazmh1980', { expiresIn: '1h' });
-  
+
+    const verificationCode = Math.floor(100000 + Math.random() * 900000).toString(); // 6 haneli doğrulama kodu
+    user.verificationCode = verificationCode;
+    user.codeExpiration = new Date(Date.now() + 3600000); // 1 saat geçerlilik süresi
+    await user.save();
+
     const transporter = nodemailer.createTransport({
       service: 'gmail',
       auth: {
@@ -76,18 +83,14 @@ export class AuthService {
         pass: 'dmys mfyu fgbj vdat'
       }
     });
-  
+
     const mailOptions = {
       from: 'ammaryasir8088@gmail.com',
       to: email,
-      subject: 'Password Reset For ShopAuth',
-      html: `
-        <p>Hello,</p>
-        <p>You requested a password reset. Please click <a href="http://localhost:4200/reset/${token}">here</a> to reset your password.</p>
-        <p>If you didn't request this, please ignore this email.</p>
-      `
+      subject: 'Password Reset Verification Code',
+      html: `<p>Your password reset verification code is: <strong>${verificationCode}</strong></p>`
     };
-  
+
     transporter.sendMail(mailOptions, (error, info) => {
       if (error) {
         console.error('Error sending email:', error);
@@ -98,21 +101,17 @@ export class AuthService {
     });
   }
 
-  async resetPassword(token: string, newPassword: string): Promise<void> {
-    let decoded;
-    try {
-      decoded = jwt.verify(token, 'aaazmh1980') as { userId: string };
-    } catch (error) {
-      throw new HttpException('Invalid or expired token', HttpStatus.UNAUTHORIZED);
+  async verifyAndResetPassword(email: string, verificationCode: string, newPassword: string): Promise<void> {
+    const user = await this.userModel.findOne({ email, verificationCode }).exec();
+    if (!user || user.codeExpiration < new Date()) {
+      throw new HttpException('Invalid or expired verification code', HttpStatus.BAD_REQUEST);
     }
-  
-    const user = await this.userModel.findById(decoded.userId).exec();
-    if (!user) {
-      throw new HttpException('User not found', HttpStatus.NOT_FOUND);
-    }
-  
+
     user.password = newPassword;
+    user.verificationCode = undefined;
+    user.codeExpiration = undefined;
     await user.save();
-    this.logger.log(`Password reset for user: ${user.email}`);
   }
+
+
 }

@@ -1,7 +1,7 @@
 import { Controller, Post, Body, HttpException, HttpStatus, Put, Get, Req, UseGuards } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { User } from './schemas/user.schema';
-import { JwtAuthGuard } from './jwt-auth.guard'; // AuthGuard'ı buraya göre ayarlayın
+import { JwtAuthGuard } from './jwt-auth.guard';
 
 @Controller('auth')
 export class AuthController {
@@ -39,29 +39,35 @@ export class AuthController {
     return { message: 'Token is valid' };
   }
 
-  @Put('reset-password')
-  async resetPassword(
-    @Body('email') email: string,
-    @Body('currentPassword') currentPassword: string,
-    @Body('newPassword') newPassword: string
-  ): Promise<any> {
+  @UseGuards(JwtAuthGuard)
+  @Get('profile')
+  async getProfile(@Req() req): Promise<any> {
     try {
-      await this.authService.resetPassword(email, currentPassword, newPassword);
+      const user = await this.authService.getUserById(req.user.userId);
+      if (!user) {
+        throw new HttpException('User not found', HttpStatus.NOT_FOUND);
+      }
+      return { user };
+    } catch (error) {
+      throw new HttpException(error.message, HttpStatus.BAD_REQUEST);
+    }
+  }
+
+  @Put('reset-password')
+  async resetPassword(@Body('token') token: string, @Body('newPassword') newPassword: string): Promise<any> {
+    try {
+      await this.authService.resetPassword(token, newPassword);
       return { message: 'Password reset successful' };
     } catch (error) {
       throw new HttpException(error.message, HttpStatus.BAD_REQUEST);
     }
   }
 
-  @UseGuards(JwtAuthGuard) // JwtAuthGuard buraya göre kullanıldı
-  @Get('profile')
-  async getProfile(@Req() req): Promise<any> {
+  @Post('send-reset-email')
+  async sendResetEmail(@Body('email') email: string): Promise<any> {
     try {
-      const user = await this.authService.getUserById(req.user.userId); // Kullanıcıyı ID'ye göre getir
-      if (!user) {
-        throw new HttpException('User not found', HttpStatus.NOT_FOUND);
-      }
-      return { user };
+      await this.authService.sendPasswordResetEmail(email);
+      return { message: 'Password reset email sent' };
     } catch (error) {
       throw new HttpException(error.message, HttpStatus.BAD_REQUEST);
     }

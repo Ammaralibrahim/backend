@@ -4,6 +4,7 @@ import { Model } from 'mongoose';
 import { User, UserDocument } from './schemas/user.schema';
 import * as jwt from 'jsonwebtoken';
 import * as nodemailer from 'nodemailer';
+import * as bcrypt from 'bcrypt';
 
 @Injectable()
 export class AuthService {
@@ -12,6 +13,8 @@ export class AuthService {
   constructor(@InjectModel(User.name) private readonly userModel: Model<UserDocument>) {}
 
   async register(user: User): Promise<string> {
+    const hashedPassword = await bcrypt.hash(user.password, 10);
+    user.password = hashedPassword;
     const newUser = new this.userModel(user);
     await newUser.save();
     
@@ -21,6 +24,8 @@ export class AuthService {
   }
 
   async registerAndLogin(user: User): Promise<string> {
+    const hashedPassword = await bcrypt.hash(user.password, 10);
+    user.password = hashedPassword;
     const newUser = new this.userModel(user);
     await newUser.save();
     
@@ -30,8 +35,11 @@ export class AuthService {
   }
 
   async login(email: string, password: string): Promise<string | null> {
-    const user = await this.userModel.findOne({ email, password }).exec();
+    const user = await this.userModel.findOne({ email }).exec();
     if (!user) return null;
+
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+    if (!isPasswordValid) return null;
 
     const token = jwt.sign({ userId: user._id, email: user.email }, 'aaazmh1980', { expiresIn: '8h' });
     this.logger.log(`User logged in: ${user.email}`);
@@ -88,7 +96,7 @@ export class AuthService {
       from: 'ammaryasir8088@gmail.com',
       to: email,
       subject: 'Password Reset Verification Code',
-      html: `<p>Your password reset verification code is: <strong>${verificationCode}</strong></p>`
+      html: `<p>Your password reset verification code is: <strong>${verificationCode}</strong></p>` 
     };
 
     transporter.sendMail(mailOptions, (error, info) => {
@@ -107,11 +115,10 @@ export class AuthService {
       throw new HttpException('Invalid or expired verification code', HttpStatus.BAD_REQUEST);
     }
 
-    user.password = newPassword;
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    user.password = hashedPassword;
     user.verificationCode = undefined;
     user.codeExpiration = undefined;
     await user.save();
   }
-
-
 }
